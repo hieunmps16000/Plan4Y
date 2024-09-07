@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="vi">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Quản Lý Tiết Kiệm</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+            }
+            .container {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+            #chart-container {
+                width: 80%;
+                margin-top: 20px;
+            }
+            .month-list {
+                margin-top: 20px;
+                width: 80%;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+            .month-item {
+                display: none; /* Ẩn tất cả các tháng */
+                width: calc(
+                    25% - 10px
+                ); /* Chiếm 25% chiều rộng của khung chứa */
+            }
+            .month-item.active {
+                display: block; /* Hiển thị các tháng hiện tại */
+            }
+            #fireworks-container {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                pointer-events: none;
+                z-index: 9999;
+            }
+            /* CSS cho checkbox */
+            .month-item input[type="checkbox"] {
+                width: 24px;
+                height: 24px;
+                margin-left: 10px;
+                cursor: pointer;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Quản Lý Tiết Kiệm</h1>
+            <div id="chart-container">
+                <canvas id="myAreaChart" width="600" height="300"></canvas>
+            </div>
+            <div class="month-list" id="month-list">
+                <!-- Các tháng sẽ được thêm vào đây bằng JavaScript -->
+            </div>
+        </div>
+
+        <!-- Thêm một container cho hiệu ứng bắn pháo hoa -->
+        <div id="fireworks-container"></div>
+
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/fireworks-js/dist/fireworks.min.js"></script>
+        <script>
+            // Danh sách các tháng bằng tiếng Việt
+            const monthNames = [
+                "Th1",
+                "Th2",
+                "Th3",
+                "Th4",
+                "Th5",
+                "Th6",
+                "Th7",
+                "Th8",
+                "Th9",
+                "Th10",
+                "Th11",
+                "Th12",
+            ];
+
+            // Tạo danh sách các tháng từ 10/9/2024 đến 9/2028
+            function generateMonthLabels(startDate, numberOfYears) {
+                const labels = [];
+                let currentDate = new Date(startDate);
+                const endDate = new Date(startDate);
+                endDate.setFullYear(endDate.getFullYear() + numberOfYears);
+
+                while (currentDate <= endDate) {
+                    const month = monthNames[currentDate.getMonth()];
+                    const year = currentDate.getFullYear();
+                    labels.push(`${month} ${year}`);
+                    currentDate.setMonth(currentDate.getMonth() + 1);
+                }
+                return labels;
+            }
+
+            const labels = generateMonthLabels("2024-09-10", 4);
+            const data = Array(labels.length).fill(0);
+            const goals = [];
+            const checkboxes = [];
+            let currentMonthIndex = 0; // Chỉ số của tháng hiện tại
+            const monthsPerPage = 4; // Số tháng hiển thị trên một trang
+
+            function calculateGoals() {
+                const goalData = [];
+                for (let i = 0; i < labels.length; i++) {
+                    if (i < 12) {
+                        // Năm đầu tiên
+                        goalData.push(1e6);
+                    } else if (i < 24) {
+                        // Năm thứ hai
+                        goalData.push(2e6);
+                    } else if (i < 36) {
+                        // Năm thứ ba
+                        goalData.push(3e6);
+                    } else {
+                        // Năm thứ tư
+                        goalData.push(
+                            (2e8 - (1e6 * 12 + 2e6 * 12 + 3e6 * 12)) / 12
+                        );
+                    }
+                }
+                return goalData;
+            }
+
+            goals.push(...calculateGoals());
+
+            let checkedMonthsCount = 0;
+
+            function updateChart() {
+                myAreaChart.data.datasets[0].data = data;
+                myAreaChart.data.datasets[1].data = goals;
+                myAreaChart.options.plugins.title.text = `Số tháng đã tick: ${checkedMonthsCount}`;
+                myAreaChart.update();
+            }
+
+            function createMonthList() {
+                const monthList = document.getElementById("month-list");
+                monthList.innerHTML = ""; // Xóa danh sách hiện tại
+
+                labels.forEach((label, index) => {
+                    const listItem = document.createElement("div");
+                    listItem.className = "month-item";
+                    listItem.innerHTML = `
+          <span>${label}</span>
+          <input type="checkbox" id="check-${index}" onclick="updateProgress(${index})">
+        `;
+                    monthList.appendChild(listItem);
+                    checkboxes.push(listItem);
+                });
+
+                // Hiển thị nhóm tháng đầu tiên
+                showCurrentMonths();
+                // Tải trạng thái checkbox từ sessionStorage
+                loadCheckboxStates();
+            }
+
+            function showCurrentMonths() {
+                checkboxes.forEach((item, index) => {
+                    const isActive =
+                        Math.floor(index / monthsPerPage) ===
+                        Math.floor(currentMonthIndex / monthsPerPage);
+                    item.classList.toggle("active", isActive);
+                });
+            }
+
+            function updateProgress(index) {
+                const checkbox = document.getElementById(`check-${index}`);
+                if (checkbox.checked) {
+                    data[index] = goals[index]; // Hoàn thành mục tiêu
+                    checkedMonthsCount++;
+                    showFireworks(); // Hiển thị hiệu ứng bắn pháo hoa
+                } else {
+                    data[index] = 0; // Chưa hoàn thành
+                    checkedMonthsCount--;
+                }
+                updateChart();
+                saveCheckboxStates(); // Lưu trạng thái vào sessionStorage
+
+                // Chuyển sang nhóm tháng tiếp theo nếu có
+                if (isGroupComplete()) {
+                    if (currentMonthIndex < labels.length - monthsPerPage) {
+                        currentMonthIndex += monthsPerPage;
+                        showCurrentMonths();
+                    }
+                }
+            }
+
+            function isGroupComplete() {
+                const start =
+                    Math.floor(currentMonthIndex / monthsPerPage) *
+                    monthsPerPage;
+                const end = start + monthsPerPage;
+                const checkedCount = checkboxes
+                    .slice(start, end)
+                    .filter(
+                        (item) => item.querySelector("input").checked
+                    ).length;
+                return checkedCount === monthsPerPage;
+            }
+
+            function showFireworks() {
+                const fireworksContainer = document.getElementById(
+                    "fireworks-container"
+                );
+                fireworksContainer.innerHTML = ""; // Xóa các hiệu ứng trước đó
+                const fireworks = new Fireworks(fireworksContainer, {
+                    // Các tùy chọn hiệu ứng bắn pháo hoa
+                    speed: 3,
+                    acceleration: 1.05,
+                    friction: 0.98,
+                    gravity: 1.5,
+                    particles: 50,
+                    traceLength: 5,
+                    explosion: 5,
+                });
+                fireworks.start();
+                setTimeout(() => fireworks.stop(), 3000); // Dừng hiệu ứng sau 3 giây
+            }
+
+            function saveCheckboxStates() {
+                const states = [];
+                labels.forEach((label, index) => {
+                    const checkbox = document.getElementById(`check-${index}`);
+                    states[index] = checkbox.checked;
+                });
+                sessionStorage.setItem(
+                    "checkboxStates",
+                    JSON.stringify(states)
+                );
+            }
+
+            function loadCheckboxStates() {
+                const states = JSON.parse(
+                    sessionStorage.getItem("checkboxStates")
+                );
+                if (states) {
+                    states.forEach((state, index) => {
+                        const checkbox = document.getElementById(
+                            `check-${index}`
+                        );
+                        checkbox.checked = state;
+                        data[index] = state ? goals[index] : 0; // Cập nhật dữ liệu tương ứng với trạng thái checkbox
+                        if (state) checkedMonthsCount++;
+                    });
+                    updateChart();
+                    showCurrentMonths(); // Hiển thị nhóm tháng hiện tại từ trạng thái lưu
+                }
+            }
+
+            const ctx = document.getElementById("myAreaChart").getContext("2d");
+            const myAreaChart = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: "Tiết Kiệm Đã Hoàn Thành",
+                            data: data,
+                            borderColor: "rgba(75, 192, 192, 1)",
+                            borderWidth: 2,
+                            fill: false,
+                        },
+                        {
+                            label: "Mục Tiêu",
+                            data: goals,
+                            borderColor: "rgba(255, 99, 132, 1)",
+                            borderWidth: 2,
+                            fill: false,
+                            borderDash: [5, 5], // Dấu gạch ngang cho mục tiêu
+                        },
+                    ],
+                },
+                options: {
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `Số tháng đã tick: ${checkedMonthsCount}`,
+                        },
+                    },
+                    scales: {
+                        x: {
+                            type: "category",
+                            labels: labels,
+                        },
+                        y: {
+                            beginAtZero: true,
+                        },
+                    },
+                },
+            });
+
+            createMonthList();
+        </script>
+    </body>
+</html>
